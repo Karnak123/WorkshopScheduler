@@ -1,5 +1,8 @@
 package ga;
 
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -21,40 +24,100 @@ public class Driver {
     private DBMgr dbMgr;
     private int scheduleNumb = 0;
     private int sessionId = 1;
+    static boolean verboseFlag = false;
 
-    public static void main(String[] args) throws SQLException {
+    public static void main(String[] args) throws SQLException, IOException {
         Driver driver = new Driver();
         driver.dbMgr = new DBMgr();
-        driver.displayInitialData();
-        if (driver.findFittestSchedule()) {
-            System.out.println("\n> from 'workshop' perspective");
-            driver.displayScheduleAsTable(driver.fittestSchedule);
-            driver.displayScheduleSessionTimes(driver.fittestSchedule);
-            driver.displayScheduleRooms(driver.fittestSchedule);
-            driver.displayScheduleSpeakers(driver.fittestSchedule);
+        driver.handleCommandLine();
+    }
+
+    private void handleCommandLine() throws IOException {
+        BufferedReader br = new BufferedReader(new InputStreamReader(System.in));
+        boolean flag = true;
+        while (flag) {
+            System.out.println(
+                    "> What do you want to do (i:nitial data display, f:ind fittest schedule, d:efault mode, v:erbose mode, e:xit) ?");
+            switch (br.readLine()) {
+                case "i":
+                    displayInitialData();
+                    break;
+                case "f":
+                    if (findFittestSchedule())
+                        handleScheduleDisplay();
+                    break;
+                case "d":
+                    verboseFlag = false;
+                    break;
+                case "v":
+                    verboseFlag = true;
+                    break;
+                case "e":
+                    flag = false;
+                    break;
+                default:
+                    System.out.println("> Invalid command");
+                    break;
+            }
+        }
+        System.exit(0);
+    }
+
+    private void handleScheduleDisplay() throws IOException {
+        BufferedReader br = new BufferedReader(new InputStreamReader(System.in));
+        boolean flag = true;
+        while (flag) {
+            System.out.println(
+                    "> What do you want to display (w:orkshop schedule, t:ime schedule, r:oom schedule, s:peaker schedule, e:xit) ?");
+            switch (br.readLine().toLowerCase()) {
+                case "w":
+                    System.out.println("\n> from 'workshop' perspective");
+                    displayScheduleAsTable(fittestSchedule);
+                    break;
+                case "t":
+                    displayScheduleSessionTimes(fittestSchedule);
+                    break;
+                case "r":
+                    displayScheduleRooms(fittestSchedule);
+                    break;
+                case "s":
+                    displayScheduleSpeakers(fittestSchedule);
+                    break;
+                case "e":
+                    flag = false;
+                    break;
+                default:
+                    System.out.println("> Invalid command");
+                    break;
+            }
         }
     }
 
     private boolean findFittestSchedule() {
         boolean flag = false;
         int generationNumber = 0;
-        System.out.println("> generation # " + generationNumber);
-        System.out.print("  schedule # | fitness | # conflicts | ");
-        System.out.println("session [workshop id, room id, speaker id, meeting-time id]");
-        IntStream.range(0, 96).forEach(i -> {
-            System.out.print("-");
-            if (i == 95)
-                System.out.println();
-        });
+        if (verboseFlag) {
+            System.out.println("> generation # " + generationNumber);
+            System.out.print("  schedule # | fitness | # conflicts | ");
+            System.out.println("session [workshop id, room id, speaker id, meeting-time id]");
+            IntStream.range(0, 96).forEach(i -> {
+                System.out.print("-");
+                if (i == 95)
+                    System.out.println();
+            });
+        }
         Population population = new Population(Driver.POPULATION_SIZE, dbMgr).sortByFitness();
-        population.getSchedules().forEach(schedule -> {
-            System.out.println(
-                    String.format("  %1$03d", scheduleNumb++) + "  | " + String.format("%.5f", schedule.getFitness())
-                            + "|     " + String.format("%1$03d", schedule.getConflicts().size()) + "   | " + schedule);
-        });
-        displayScheduleAsTable(population.getSchedules().get(0));
+        if (verboseFlag) {
+            population.getSchedules().forEach(schedule -> {
+                System.out.println(String.format("  %1$03d", scheduleNumb++) + "  | "
+                        + String.format("%.5f", schedule.getFitness()) + "|     "
+                        + String.format("%1$03d", schedule.getConflicts().size()) + "   | " + schedule);
+            });
+            displayScheduleAsTable(population.getSchedules().get(0));
+        }
         if (population.getSchedules().get(0).getFitness() != 1) {
-            displayScheduleConflicts(population.getSchedules().get(0));
+            if (verboseFlag)
+                displayScheduleConflicts(population.getSchedules().get(0));
             sessionId = 1;
             flag = handleEvolvePopulation(population, generationNumber);
         } else {
@@ -69,29 +132,35 @@ public class Driver {
         boolean flag = false;
         GeneticAlgorithm geneticAlgorithm = new GeneticAlgorithm(dbMgr);
         while (population.getSchedules().get(0).getFitness() != 1.0) {
-            System.out.println("> generation # " + ++generationNumber);
-            System.out.print("  schedule # | fitness | # conflicts | ");
-            System.out.println("session [workshop id, room id, speaker id, meeting-time id]");
-            IntStream.range(0, 96).forEach(i -> {
-                System.out.print("-");
-                if (i == 95)
-                    System.out.println();
-            });
+            ++generationNumber;
+            if (verboseFlag) {
+                System.out.println("> generation # " + generationNumber);
+                System.out.print("  schedule # | fitness | # conflicts | ");
+                System.out.println("session [workshop id, room id, speaker id, meeting-time id]");
+                IntStream.range(0, 96).forEach(i -> {
+                    System.out.print("-");
+                    if (i == 95)
+                        System.out.println();
+                });
+            }
             population = geneticAlgorithm.evolve(population).sortByFitness();
             scheduleNumb = 0;
-            population.getSchedules().forEach(schedule -> {
-                System.out.println(String.format("     %1$03d", scheduleNumb++) + "      | "
-                        + String.format("%.5f", schedule.getFitness()) + " |      "
-                        + String.format("%1$03d", schedule.getConflicts().size()) + "   | " + schedule);
-            });
-            displayScheduleAsTable(population.getSchedules().get(0));
+            if (verboseFlag) {
+                population.getSchedules().forEach(schedule -> {
+                    System.out.println(String.format("  %1$03d", scheduleNumb++) + "  | "
+                            + String.format("%.5f", schedule.getFitness()) + "|     "
+                            + String.format("%1$03d", schedule.getConflicts().size()) + "   | " + schedule);
+                });
+                displayScheduleAsTable(population.getSchedules().get(0));
+            }
             if (population.getSchedules().get(0).getFitness() == 1) {
                 System.out.println("\n> Solution Found in " + (generationNumber + 1) + " generations");
                 fittestSchedule = population.getSchedules().get(0);
                 flag = true;
             } else {
                 sessionId = 1;
-                displayScheduleConflicts(population.getSchedules().get(0));
+                if (verboseFlag)
+                    displayScheduleConflicts(population.getSchedules().get(0));
             }
         }
         return flag;
@@ -112,11 +181,11 @@ public class Driver {
 
     private void displayScheduleAsTable(Schedule schedule) {
         ArrayList<Session> sessions = schedule.getSessions();
-        System.out.println(
-                "    session id  |   workshop (id)           |   room id |   speaker (id)    |   session time (id)");
-        IntStream.range(0, 118).forEach(i -> {
+        System.out.println("    session id  | " + String.format("%1$-82s", "workshop (id)")
+                + "|   room id |   speaker (id)    | session time (id)");
+        IntStream.range(0, 154).forEach(i -> {
             System.out.print("-");
-            if (i == 117)
+            if (i == 153)
                 System.out.println();
         });
         sessions.forEach(e -> {
@@ -125,7 +194,7 @@ public class Driver {
             int speakersIndex = dbMgr.getSpeakers().indexOf(e.getSpeaker());
             int sessionTimeIndex = dbMgr.getSessionTimes().indexOf(e.getSessionTime());
             System.out.print(String.format("    %1$03d  ", sessionId) + "  | ");
-            System.out.print(String.format("%1$-30s", dbMgr.getWorkshops().get(workshopsIndex).getName() + " ("
+            System.out.print(String.format("%1$-82s", dbMgr.getWorkshops().get(workshopsIndex).getName() + " ("
                     + dbMgr.getWorkshops().get(workshopsIndex).getId() + ") ") + "| ");
             System.out.print(String.format("%1$-3s", dbMgr.getRooms().get(roomsIndex).getId()) + "  | ");
             System.out.print(String.format("%1$-15s", dbMgr.getSpeakers().get(speakersIndex).getName() + " ("
@@ -209,10 +278,10 @@ public class Driver {
     }
 
     private Driver displayWorkshops() {
-        System.out.println("id    |workshop                           |speaker");
+        System.out.println("id    |" + String.format("%1$-74s", "workshop") + "|speaker");
         System.out.println("------+-----------------------------------+--------");
         dbMgr.getWorkshops().forEach(x -> System.out
-                .println(x.getId() + "  |" + String.format("%1$-35s", x.getName()) + "|" + x.getSpeaker()));
+                .println(x.getId() + "  |" + String.format("%1$-74s", x.getName()) + "|" + x.getSpeaker()));
         System.out.println();
         return this;
     }
